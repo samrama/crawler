@@ -1,0 +1,12 @@
+{
+  "name": "crawler",
+  "version": "1.0.0",
+  "description": "Where you are, Here we are",
+  "main": "day.js",
+  "author": "syalias",
+  "license": "ISC",
+  "dependencies": {
+    "nightmare": "^2.10.0",
+    "fast-csv": "^2.4.0"
+  }
+}
