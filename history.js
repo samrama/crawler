@@ -9,7 +9,7 @@ console.log("\x1b[36m%s\x1b[0m", "▁ ▂ ▃ ▄ ▅ ▆ ▇ █ ▇ ▆ ▅ �
 var KEYWORDARRAY = [];         // 关键字数组
 var KEYWORDLENGTH = 0;         // 关键字总数
 var HOTWORDINDEX = 1;          // 热词历史关键字指针
-var HOTWORDPATH = 'hdata/';    // 热词数据存储根路径
+var HOTWORDPATH = 'ddata/';    // 热词数据存储根路径
 
 // ---------------- tools ----------------
 // 创建文件夹
@@ -37,11 +37,21 @@ var dataFormat = function (data) {
   return formatData;
 }
 
+// 获取运行程序当日
+var getToday = function () {
+  var today = new Date();
+  var dd = today.getDate();
+  var mm = today.getMonth()+1; //January is 0!
+
+  var yyyy = today.getFullYear();
+  return yyyy + '-' + mm + '-' + dd;
+}
+
 // 获取关键字 形成关键字列表
 csv
  .fromPath("data/topic.csv")
  .on("data", function(data){
-   KEYWORDARRAY.push(data[1]);
+   KEYWORDARRAY.push(data[0]);
  })
  .on("end", function(){
    KEYWORDLENGTH = KEYWORDARRAY.length;
@@ -55,13 +65,14 @@ csv
  */
 var readHotwordHistory = function(keyword){
   console.log(keyword);
+  var today = getToday();
   nightmare
   .goto('http://data.weibo.com/index')
   .type('.filter_search1 input', keyword)
   .click('.filter_search1 a')
   .wait(1000)
   .type('#datepicker', '2014-1-1')
-  .type('#datepicker1', '2017-5-1')
+  .type('#datepicker1', today)
   .click('.search-compare')
   .wait(1000)
   .evaluate(function () {
@@ -91,6 +102,7 @@ var readHotwordHistory = function(keyword){
     hotwordHistoryWrite(result.title, fdata);
   })
   .catch(function (error) {
+    console.log(error);
     hotwordErrorHandle();
   });
 }

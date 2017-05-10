@@ -9,7 +9,7 @@ console.log("\x1b[36m%s\x1b[0m", "▁ ▂ ▃ ▄ ▅ ▆ ▇ █ ▇ ▆ ▅ �
 var KEYWORDARRAY = [];         // 关键字数组
 var KEYWORDLENGTH = 0;         // 关键字总数
 var HOTWORDINDEX = 1;          // 热词历史关键字指针
-var HOTWORDPATH = 'hdata/';    // 热词数据存储根路径
+var HOTWORDPATH = 'ddata/';    // 热词数据存储根路径
 
 // ---------------- tools ----------------
 // 创建文件夹
@@ -57,7 +57,7 @@ var dataFormat = function (data) {
 csv
  .fromPath("data/topic.csv")
  .on("data", function(data){
-   KEYWORDARRAY.push(data[1]);
+   KEYWORDARRAY.push(data[0]);
  })
  .on("end", function(){
    KEYWORDLENGTH = KEYWORDARRAY.length;
@@ -127,7 +127,8 @@ var writeFiveDayHistory = function (fname, data) {
 
     if (list.length != 0) {
       var lastItem = list[list.length-1];
-      var lastItemDate = lastItem[0];for (var i in data) {
+      var lastItemDate = lastItem[0];
+      for (var i in data) {
         if (data[i][0] == lastItemDate) {
           index = parseInt(i) + 1;
           break;

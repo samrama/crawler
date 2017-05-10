@@ -13,7 +13,7 @@ console.log("\x1b[36m%s\x1b[0m", "▁ ▂ ▃ ▄ ▅ ▆ ▇ █ ▇ ▆ ▅ �
 var KEYWORDARRAY = [];         // 关键字数组
 var KEYWORDLENGTH = 0;         // 关键字总数
 var HOTWORDINDEX = 1;          // 关键字指针
-var HOTWORDPATH = 'ddata/';    // 每日数据存储根路径
+var HOTWORDPATH = 'hdata/';    // 每日数据存储根路径
 
 // ---------------- Tools ----------------
 // 创建文件夹
@@ -32,12 +32,6 @@ var getToday = function () {
   var mm = today.getMonth()+1; //January is 0!
 
   var yyyy = today.getFullYear();
-  if(dd<10){
-      dd='0'+dd;
-  }
-  if(mm<10){
-      mm='0'+mm;
-  }
   return yyyy + '-' + mm + '-' + dd;
 }
 
