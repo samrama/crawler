@@ -2,7 +2,11 @@
 var Nightmare = require('nightmare');
 var csv = require('fast-csv');
 var fs = require('fs');
-var nightmare = Nightmare({'show': false});
+var nightmare = Nightmare({
+  'show': false,
+  'executionTimeout': 1000,
+  'dock': true
+});
 
 console.log("\x1b[36m%s\x1b[0m", "▁ ▂ ▃ ▄ ▅ ▆ ▇ █ ▇ ▆ ▅ ▄ ▃ ▂ ▁");
 
@@ -10,6 +14,16 @@ var KEYWORDARRAY = [];         // 关键字数组
 var KEYWORDLENGTH = 0;         // 关键字总数
 var HOTWORDINDEX = 1;          // 热词历史关键字指针
 var HOTWORDPATH = 'ddata/';    // 热词数据存储根路径
+var ERRORKEYWORD = [];               // 没有采集数据的关键字
+
+var STARTTIME = new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '');
+
+var LOGPATH = '';    // 错误日志 记录哪些关键字没有被读取数据
+var TOPICPATH = '';  // topic地址
+
+var argv = process.argv[process.argv.length-1];
+TOPICPATH = "data/topic_" + argv + ".csv";
+LOGPATH = 'err_log/day_err_' + argv + '.csv';
 
 // ---------------- tools ----------------
 // 创建文件夹
@@ -22,18 +36,27 @@ var mkdir = function (dirname) {
 }
 
 var checkFileExist = function (path, cb) {
-  if (!fs.existsSync(path)){
-    var ws = fs.createWriteStream(path);
-    csv
-     .write([], {headers: ["date", "value"]})
-     .pipe(ws);
+  try {
+    if (!fs.existsSync(path)){
+      console.log("\x1b[36m%s\x1b[0m", "提示: 文件不存在");
+      var ws = fs.createWriteStream(path);
+      csv
+       .write([], {headers: ["date", "value"]})
+       .pipe(ws);
 
-   ws.on("finish", function(){
-     cb()
-   });
-  }
-  else {
-    cb()
+      ws.on("finish", function(e){
+        console.log("\x1b[36m%s\x1b[0m", "提示: 文件创建完成");
+        checkFileExist(path, cb);
+      });
+    }
+    else {
+      console.log("\x1b[36m%s\x1b[0m", "提示: 文件已经存在");
+      console.log(path);
+      cb();
+    }
+  } catch (e) {
+    console.log('ccc');
+    console.log(e);
   }
 }
 
@@ -44,18 +67,24 @@ var checkFileExist = function (path, cb) {
  2017-04-06,663
  */
 var dataFormat = function (data) {
-  var formatData = [['date','value']];
-  for (var i=0; i<data.date.length; i++) {
-    var list = [];
-    list.push(data.date[i], data.value[i]);
-    formatData.push(list);
+  try {
+    var formatData = [['date','value']];
+    for (var i=0; i<data.date.length; i++) {
+      var list = [];
+      list.push(data.date[i], data.value[i]);
+      formatData.push(list);
+    }
+    return formatData;
+  } catch (e) {
+    console.log("\x1b[36m%s\x1b[0m", "提示: 格式化数据错误");
+    console.log(data);
+    return [];
   }
-  return formatData;
 }
 
 // 获取关键字 形成关键字列表
 csv
- .fromPath("data/topic.csv")
+ .fromPath(TOPICPATH)
  .on("data", function(data){
    KEYWORDARRAY.push(data[0]);
  })
@@ -64,15 +93,31 @@ csv
    readFiveDayHistory(KEYWORDARRAY[HOTWORDINDEX]);
  });
 
-// ---------------- add history ----------------
-var readFiveDayHistory = function (keyword) {
-  console.log(keyword);
+var isComein = false;
+var comein = function (callback) {
   nightmare
   .goto('http://data.weibo.com/index')
-  .type('.filter_search1 input', keyword)
+  .type('.filter_search1 input', '乐视网')
   .click('.filter_search1 a')
-  .wait(2000)
+  .wait(3000)
+  .then(function (result) {
+    callback(true)
+  })
+  .catch(function (error) {
+    callback(false)
+  });
+}
+var dataConector = function (keyword) {
+  console.log("\x1b[36m%s\x1b[0m", keyword);
+  nightmare
+  .type('.long-search input', "")
+  .wait(300)
+  .type('.long-search input', keyword)
+  .click('.search-compare')
+  .wait(1000)
   .evaluate(function () {
+    var inputKeyword = document.querySelector(".long-search input").value;
+    if (inputKeyword == "找不到此热词") {return false;}
     // get visit title
     var title = document.getElementsByClassName("search-word")[0].innerHTML;
     // get hotword_chart echarts instance id
@@ -94,33 +139,89 @@ var readFiveDayHistory = function (keyword) {
     return ret;
   })
   .then(function (result) {
+    if (!result) {
+      ERRORKEYWORD.push(keyword);
+      writeFiveDayErrorHandle();
+      return;
+    }
+    if (result.title.toLowerCase() != keyword.toLowerCase()) {
+      console.log("\x1b[36m%s\x1b[0m", "提示: 采集Title不等于Keyword 重新采集");
+      dataConector(keyword);
+      return;
+    }
     var fdata = dataFormat(result);
     writeFiveDayHistory(result.title, fdata);
   })
   .catch(function (error) {
-    writeFiveDayErrorHandle(error);
+    console.log("\x1b[36m%s\x1b[0m", "提示: 采集错误 需要将keyword写入错误文件");
+    ERRORKEYWORD.push(keyword);
+    writeFiveDayErrorHandle();
   });
+}
+var readFiveDayHistory = function(keyword){
+  if (!isComein) {
+    comein(function(isci){
+      if (!isci) {
+        console.log(' SYSTEM START ERROR !!! ');
+        nightmare.halt();
+        return;
+      }
+      isComein = isci;
+      dataConector(keyword);
+    })
+  }
+  else {
+    dataConector(keyword);
+  }
+
+}
+
+/** 如果读取历史 读取错误 将错误的关键字 写入err_log中 文件名称 day_err.csv
+ * [writeHisErrKeyword]
+ * @param  keyword  "乐视网"
+ */
+var writeDayErrKeyword = function () {
+  console.log(ERRORKEYWORD);
+  var val = [["value"]];
+  for (var i in ERRORKEYWORD) {
+    var arr = [];
+    arr.push(ERRORKEYWORD[i]);
+    val.push(arr);
+  }
+  var ws = fs.createWriteStream(LOGPATH);
+  csv
+   .write(val, {headers: ["value"]})
+   .pipe(ws);
 }
 
 var writeFiveDayHistory = function (fname, data) {
   var path = mkdir(fname);
   var fileName = path + "/data.csv";
 
-  checkFileExist(fileName, function () {
-    var stream = fs.createReadStream(fileName);
-
-    var arr = []
-    var csvStream = csv()
-    .on("data", function(data){
-      arr.push(data)
+  var write = function (data) {
+    checkFileExist(fileName, function () {
+      var stream = fs.createReadStream(fileName);
+      try {
+        var arr = [];
+        var csvStream = csv()
+        .on("data", function(data){
+          arr.push(data)
+        })
+        .on("error", function(data){
+          console.log("\x1b[36m%s\x1b[0m", "------");
+          write(data);
+        })
+        .on("end", function(){
+          var rwData = addNewDate(arr);
+          rewriteData(rwData);
+        });
+        stream.pipe(csvStream);
+      } catch (e) {
+        console.log(e);
+        write(data);
+      }
     })
-    .on("end", function(){
-      var rwData = addNewDate(arr);
-      rewriteData(rwData);
-    });
-
-    stream.pipe(csvStream);
-  })
+  }
 
   var addNewDate = function (list) {
     var index = 1;
@@ -149,25 +250,44 @@ var writeFiveDayHistory = function (fname, data) {
      .pipe(ws);
 
     ws.on("finish", function(){
+      if (!fs.existsSync(fileName)) {
+        console.log("\x1b[36m%s\x1b[0m", "提示: 写入数据出现错误, 正在重新写入...");
+        console.log(fname);
+        writeHour(fname, data);
+        return;
+      }
       if (HOTWORDINDEX < KEYWORDLENGTH - 1) {
         HOTWORDINDEX += 1;
         readFiveDayHistory(KEYWORDARRAY[HOTWORDINDEX]);
       }
       else {
         nightmare.halt();
+        writeDayErrKeyword();
         console.log("\x1b[31m%s\x1b[0m", "READ OVER");
+        console.log('start-time');
+        console.log(STARTTIME);
+        console.log('end-time');
+        console.log(new Date().toISOString().replace(/T/, ' ').replace(/\..+/, ''));
       }
     });
   }
+
+  write(data);
+
 }
 
-var writeFiveDayErrorHandle = function (err) {
+var writeFiveDayErrorHandle = function () {
   if (HOTWORDINDEX < KEYWORDLENGTH - 1) {
     HOTWORDINDEX += 1;
     readFiveDayHistory(KEYWORDARRAY[HOTWORDINDEX]);
   }
   else {
     nightmare.halt();
+    writeDayErrKeyword();
     console.log("\x1b[31m%s\x1b[0m", "READ OVER");
+    console.log('start-time');
+    console.log(STARTTIME);
+    console.log('end-time');
+    console.log(new Date().toISOString().replace(/T/, ' ').replace(/\..+/, ''));
   }
 }
